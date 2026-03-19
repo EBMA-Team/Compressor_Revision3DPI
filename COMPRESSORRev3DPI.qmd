@@ -684,9 +684,9 @@ knitr::knit_print(TableRev3DPIComp)
 
 ```
 
-Adverse events were detected in 16% of the cohort as shown in @tbl-comp, with an average detection with 30 days of surgery.
+Adverse events were detected in 43% of the cohort as shown in @tbl-comp, with an average detection with 30 days of surgery.
 
-Write complications table for SM review
+Write complications table for RB review
 
 ```{r}
 #| label: write-complic
