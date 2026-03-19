@@ -1,0 +1,779 @@
+---
+title: "COMPRESSOR_Revision3DPI"
+author: "Corey Scholes"
+affiliation: "EBM Analytics"
+version: 3.0
+type: "website"
+number-sections: true
+number-depth: 3
+date: "2026-Mar-19"
+date-modified: "2026-Mar-19"
+
+bibliography: CompressorGov references.bib
+
+editor:
+  visual
+format:
+  html:
+    toc: true
+    toc-expand: 2
+    number-sections: true
+    code-fold: true
+    
+execute: 
+  echo: false
+  warning: false
+  message: false
+---
+
+# Preamble
+
+The following analysis is a report on the activity, quality and data contained in the COMPRESSOR registry, which is described in the [registry wiki](https://sites.google.com/ebma.com.au/compressor-registry/home?authuser=0).
+
+Analysis packages were loaded initially into the *R* environment.
+
+```{r}
+#| label: load-packages
+
+if (!require("pacman")) install.packages("pacman")
+pacman::p_load(# Load required packages
+  "fuzzyjoin",
+  "ggforce",
+  "ggdag",
+  "ggmap",
+  "geosphere",
+  "dplyr",
+  "flextable",
+  "litedown",
+  "grateful",
+  "modelsummary",
+  "quantreg",
+  "readr",
+  "knitr",
+  "cardx",
+  "forcats",
+  "gargle",
+  "googledrive",
+  "googlesheets4",
+  "openxlsx2",
+  "tidyverse",
+  "tidymodels",
+  "lubridate",
+  "consort",
+  "gt",
+  "gtsummary",
+  "survival",
+  "ggplot2",
+  "ggdist",
+  "ggfortify",
+  "ggsurvfit",
+  "mice",
+  "marginaleffects",
+  "naniar",
+  "quantreg",
+  "broom",
+  "epoxy",
+  "broom.helpers",
+  "stringr"
+  )
+  
+  
+```
+
+Access to the COMPRESSOR datasets was pre-authorised.
+
+```{r}
+#| label: auth2
+#| echo: false
+
+options(
+  gargle_oauth_cache = ".secrets",
+  gargle_oauth_email = TRUE
+)
+
+googledrive::drive_auth(
+  cache = ".secrets", 
+  email = TRUE
+  )
+```
+
+A function was generated to retrieve files using the *googledrive* package, to call on later in the analysis for processing data imports.
+
+```{r}
+#| label: folder
+#| echo: false
+
+base_folder_id1 <- "1c08mZXSxqhJx5IniJ1ur3YpWpgWXUoIO"
+
+
+```
+
+```{r}
+get_specific_snapshot <- function(folder_name, base_folder_id = base_folder_id1) {
+  tryCatch({
+    # Check if the folder exists in the base directory
+    folder <- googledrive::drive_ls(as_id(base_folder_id), pattern = paste0("^", folder_name, "$"))
+    
+    if(nrow(folder) == 0) {
+      stop(paste("Folder", folder_name, "not found"))
+    }
+    
+    # Find the snapshot file in the specified folder
+    snapshot_file <- googledrive::drive_ls(
+      folder$id, 
+      pattern = "Registry data snapshot\\.xlsx$"
+    )
+    
+    if(nrow(snapshot_file) == 0) {
+      stop("No snapshot file found in specified folder")
+    }
+    
+    # Return both pieces of information as a list
+    return(list(
+      snapshot = snapshot_file,
+      folder_name = folder$name
+    ))
+    
+  }, error = function(e) {
+    stop(paste("Error finding specified snapshot:", e$message))
+  })
+}
+```
+
+Data was retrieved from live database tables. Source files were specified and stored as global variables to call on in further functions.
+
+```{r}
+#| label: live-table
+#| echo: false
+
+SheetIDs <- list(
+DbSS = "https://docs.google.com/spreadsheets/d/1ZqqVDOy2Gsq1E0mKAuQokfNyccpNUt4x0EJC156T90Q/edit"
+)
+
+# Treatments Masterlist - Timestamp is > Registry Start date (gsuite)
+
+```
+
+```{r}
+#| label: read-tables
+
+# Authenticate for sheets using the same token
+gs4_auth(token = drive_token())
+
+
+
+ComplicTable <- googlesheets4::read_sheet(
+  ss = SheetIDs$DbSS,
+  sheet = "Complications",
+  skip = 1,
+  col_names = TRUE,
+  col_types = "cccTciicicccccccccccccccccDccD"
+  )
+
+
+#To match to acctData
+PatientTable <- googlesheets4::range_read(
+  ss = SheetIDs$DbSS,
+  sheet = "Patient",
+  range = "A10:Q",
+  col_names = FALSE,
+  col_types = "DccccDcccDcicccDi"
+  )
+
+
+Patient_Col <- c(
+  "PatientCreationDate",
+  "PatientID",
+  "LastName",
+  "FirstName",
+  "AlternateID",
+  "DateOfBirth",
+  "Sex",
+  "RegistryStatus",
+  "RegistryStatusNotes",
+  "DateRegistryStatus",
+  "NotificationMethod",
+  "NoTreatmentRecords",
+  "Email",
+  "Phone",
+  "PatientRegistrationStatus",
+  "DatePatientRegistration",
+  "TrueNoTreatmentRecords"
+)
+
+colnames(PatientTable) <- Patient_Col
+
+
+# TreatTable <- googlesheets4::range_read(
+#   ss = SheetIDs$DbSS,
+#   sheet = "Treatment", 
+#   range = "A7:Z",
+#   col_names = FALSE
+#   )
+# 
+# TreatTableCol <- googlesheets4::range_read(
+#   ss = SheetIDs$DbSS,
+#   sheet = "Treatment", 
+#   range = "A1:Z1",
+#   col_names = FALSE
+#   )
+# 
+#  colnames(TreatTable) <- TreatTableCol
+
+
+```
+
+A static registry snapshot was retrieved and formatted based on the fixed date of preparation of the snapshot (10-Mar-2026).
+
+```{r}
+
+# Authenticate for sheets using the same token
+gs4_auth(token = drive_token())
+
+# To get a snapshot from a specific folder (e.g., "20230415")
+specific_snapshot <- get_specific_snapshot("20260310")
+
+
+```
+
+```{r}
+#| execute: true
+
+# The snapshot coming out of the framework is over filtering the records and I dont know yet where to make the fix. I think it could be a structural issue. I think I will just bypass the snapshot for now and read in the sheets raw.
+
+temp_file1 <- tempfile(fileext = ".xlsx")
+drive_download(
+  file = specific_snapshot$snapshot$id,
+  path = temp_file1,
+  overwrite = TRUE
+)
+
+# Correction to reset back to excel origin
+DaysDiff <- as.numeric(as.duration(interval(ymd("1899-12-30"), ymd("1970-01-01"))),"days")
+
+
+Snapshot <- openxlsx2::wb_to_df(
+  temp_file1,
+  sheet = "Combined",
+  colNames = TRUE,
+  detectDates = TRUE
+  ) |> mutate(
+    PatientID = stringr::str_split_i(TreatmentID,"\\.",1),
+    SurgicalTreatment2 = case_when(
+      stringr::str_detect(str_to_lower(EBMAComment),"surgery recommended") & SurgicalTreatment == "Non-Surgical" ~ "Surgery recommended",
+      .default = SurgicalTreatment
+    ),
+    Sex2 = if_else(
+      stringr::str_detect(str_to_lower(Sex), "f"),
+      "Female",
+      "Male"
+    ),
+    Retrospective = if_else(
+      stringr::str_detect(str_to_lower(AnalysisLabel), "retrospective", negate = TRUE) | is.na(AnalysisLabel),
+      "No",
+      "Yes"
+    ),
+    Planned = if_else(
+      stringr::str_detect(str_to_lower(AnalysisLabel), "plan"),
+      "Yes",
+      "No"
+    ),
+    Hardware = str_extract(str_to_lower(AnalysisLabel), "\\b[a-z]{1,5}\\b"),
+    TreatmentType2 = if_else(
+    stringr::str_detect(TreatmentType, "Revision"),
+    "Revision",
+    "Primary"
+),
+AgeAtInitialExam = as.numeric(AgeAtInitialExam),
+AgeAtTreatment = as.numeric(AgeAtTreatment)
+  ) |> unite(
+  col = "CombID",
+  sep = ".",
+  c("PatientID","AffectedSide"),
+  remove = FALSE
+)
+
+
+
+STROBEInput <- openxlsx2::wb_to_df(
+  temp_file1,
+  sheet = "Strobe_Input",
+  colNames = TRUE,
+  detectDates = TRUE
+  )
+
+```
+
+## Retrieve MMM
+
+```{r}
+
+# ── 1. Download the POA 2021 × MMM 2023 concordance ──────────────────────────
+# Direct xlsx from data.gov.au (Dept of Health and Aged Care, CC BY 2.5 AU)
+# https://www.data.gov.au/data/dataset/postal-areas-2021-by-modified-monash-model-2023
+ 
+mmm_url <- "https://data.gov.au/data/dataset/9c4e8fab-e9c3-4728-80a8-e59643f258a5/resource/04ed31ba-d48b-437c-9279-f4b788b9dd90/download/poa_21-mmm_23.xlsx"
+
+tmp <- tempfile(fileext = ".xlsx")
+download.file(mmm_url, destfile = tmp, mode = "wb")
+
+ concordance_raw <- openxlsx2::wb_to_df(tmp, start_row = 8, start_col = 2, skip_empty_cols = TRUE)
+
+# ── 2. Inspect and clean the concordance ─────────────────────────────────────
+# Preview structure first — column names may vary; check with:
+ glimpse(concordance_raw)
+
+MMMPostcode <- concordance_raw |>
+  rename_with(str_to_lower) |>
+  rename(
+    postcode  = "poa 2021 code",
+    mmm_code  = "mmm 2023"
+  ) |>
+  summarise(
+    mmm_code       = max(mmm_code, na.rm = TRUE),
+    mmm_ambiguous  = n() > 1,
+    .by = postcode
+  )  |>
+  mutate(
+    postcode = as.character(postcode),
+    mmm_code = as.integer(mmm_code),
+    mmm_label = case_when(
+      mmm_code == 1 ~ "Metropolitan",
+      mmm_code == 2 ~ "Regional centre",
+      mmm_code == 3 ~ "Large rural town",
+      mmm_code == 4 ~ "Medium rural town",
+      mmm_code == 5 ~ "Small rural town",
+      mmm_code == 6 ~ "Remote community",
+      mmm_code == 7 ~ "Very remote community",
+      .default      = NA_character_
+    )
+  ) |>
+  select(postcode, mmm_code, mmm_label, mmm_ambiguous)
+
+```
+
+# Context
+
+COMPRESSOR (Complex Reconstructive Surgery Outcomes Registry) is a clinical quality registry supporting the practices of one surgeon in Sydney, New South Wales. It has been in operation over two distinct periods, with upper and lower limb tumour cohorts, as well as tumour of the pelvis and reintervention arthroplasty cohorts of the hip and knee. The periods that the registry has been actively collecting PROMs;
+
+1.  25-Feb-2022 to 29-Sep-2022
+
+2.  27-Mar-2025 to present
+
+It should be noted that collection of PROMs has been heavily restricted for this registry due to concerns over appropriateness to follow up patients at high-risk of mortality or other contraindications for completing scores. These restrictions have only recently been lifted, and only then for cases receiving hardware components of interest (Ossis, Stryker GMRS-MRH).
+
+
+# Recruitment Flow by Region
+
+Flowcharts as per STROBE [@Vandenbroucke2007] and RECORD [@Benchimol2015] guidelines were generated for treatments enrolled into the Registry. Followup was set to eligibility at *any postoperative timepoint*.
+
+```{r}
+
+
+STROBEFlow2 <- STROBEInput |> 
+  # Filter out rows with missing TreatmentID
+  dplyr::filter(!is.na(TreatmentID)) |> 
+  # Join with relevant columns from Snapshot
+  dplyr::left_join(
+    Snapshot |> 
+      dplyr::select(
+        TreatmentID,
+        CombID,
+        DateInitialExamination,
+        EligibleAtPreop,
+        EligibleAtx3months,
+        EligibleAtx6months,
+        EligibleAtx12months,
+        EligibleAtx60months,
+        EligibleAtx120months,
+        SurgicalTreatment2
+      ) |> 
+      # Convert all date columns to date format
+      dplyr::mutate(
+        across(contains("Date"), lubridate::ymd)
+      ),
+    # Explicitly specify join column
+    by = "TreatmentID"
+  ) |> dplyr::mutate(
+    TreatmentStatus2 = if_else(
+          TreatmentStatus == "No further followup" & is.na(DateTreatment),
+          "Archived",
+          TreatmentStatus
+  ),
+  EligibleFU = if_else(
+   EligibleAtx3months == "Yes" | EligibleAtx6months == "Yes" | EligibleAtx12months == "Yes" | EligibleAtx60months == "Yes" | EligibleAtx120months == "Yes",
+    "Yes",
+    "No"
+  )
+  )
+
+```
+
+```{r}
+
+CurrentDate <- as.character("20260310")
+
+STROBEFlow <- STROBEInput  |> dplyr::left_join(# Join with relevant columns from Snapshot
+    Snapshot |> 
+      dplyr::select(
+        TreatmentID,
+        CombID,
+        EligibleAtPreop,
+        EligibleAtx12months,
+        SurgicalTreatment2
+      ) |> 
+      # Convert all date columns to date format
+      dplyr::mutate(
+        across(contains("Date"), lubridate::ymd)
+      ),
+    by = "TreatmentID"
+  ) |> dplyr::mutate(
+    TreatmentStatus2 = if_else(
+          TreatmentStatus == "No further followup" & is.na(DateTreatment),
+          "Archived",
+          TreatmentStatus
+  )
+  ) |> dplyr::mutate(
+    exclusion1 = case_when(
+    stringr::str_detect(RegistryCohortName,"TumourPelvis|ReinterventionTHA|General", negate = TRUE) | is.na(RegistryCohortName) ~ "Not an indication of interest",
+    stringr::str_detect(RegistryCohortName,"TumourPelvis|ReinterventionTHA|General") & (stringr::str_detect(str_to_lower(AnalysisLabel),"ossis", negate = TRUE) | is.na(AnalysisLabel)) ~ "Not hardware of interest",
+    stringr::str_detect(RegistryCohortName,"TumourPelvis|ReinterventionTHA|General") & stringr::str_detect(str_to_lower(AnalysisLabel),"ossis") & (SurgicalTreatment2 != "Surgical" | is.na(SurgicalTreatment2) | str_detect(TreatmentStatus,"Pending")) ~ "Not a surgical treatment",
+stringr::str_detect(RegistryCohortName,"TumourPelvis|ReinterventionTHA|General") & stringr::str_detect(str_to_lower(AnalysisLabel),"ossis") & SurgicalTreatment2 == "Surgical" & stringr::str_detect(RegistryStatus,"Opt") ~ "Patient Opt-out",
+stringr::str_detect(RegistryCohortName,"TumourPelvis|ReinterventionTHA|General") & stringr::str_detect(str_to_lower(AnalysisLabel),"ossis") & SurgicalTreatment2 == "Surgical" & stringr::str_detect(RegistryStatus,"Opt", negate = TRUE) & TreatmentType == "Primary" ~ "Non-revision indication",
+    .default = NA_character_
+  ),
+  induction = if_else(
+    is.na(exclusion1),
+    TreatmentID,
+    NA_character_
+  ),
+  PatientID = stringr::str_split_i(TreatmentID,"\\.",1),
+  LimbID = stringr::str_c(PatientID,".",AffectedSide)
+  ) |> group_by(
+    LimbID
+  ) |> arrange(
+    DateTreatment
+  ) |> mutate(
+    Count = row_number()
+  )|> ungroup() |> mutate(
+exclusion2 = case_when(
+  #!is.na(induction) & is.na(Approach) ~ "No data entered",
+  Count >1 ~ "Not Index Procedure",
+),
+followup = if_else(
+  is.na(exclusion1) & is.na(exclusion2),
+  TreatmentID,
+  NA_character_
+),
+lost_followup = if_else(
+  EligibleAtx12months != "Yes" | is.na(EligibleAtx12months),
+  TreatmentStatusNotes,
+  NA_character_
+),
+mitt = if_else(
+    !is.na(followup) & is.na(lost_followup),
+    TreatmentID,
+    NA_character_
+)
+) |> dplyr::rename(
+  trialno = "TreatmentID"
+)
+
+```
+
+```{r}
+#| label: fig-strobe-cohort1
+#| fig-cap: "Flowchart of extraction and followup of surgical sample from the Registry"
+
+
+STROBEPlot1 <- consort_plot(
+  data = STROBEFlow,
+ orders = c(
+   trialno = "Population",
+   exclusion1 = "Ineligible for 3DPI",
+   induction = "Surgical pool",
+   exclusion2 = "Excluded",
+   followup = "Eligible for analysis",
+   lost_followup = "Not eligible for followup",
+   mitt = "Followup Analysis"
+   ),
+ side_box = c(
+   "exclusion1",
+   "exclusion2",
+   "lost_followup"
+   ),
+ cex = 0.6
+)
+
+knitr::knit_print(STROBEPlot1)
+
+```
+
+
+
+The flowcharts were separated into two components (@fig-strobe-cohort1 and @fig-strobe-cohort2) and exclusions noted for patients that were labelled as a procedure failure.
+
+::: {#procedurefailure .callout-note}
+A procedure failure is defined by a terminology in the clinical letter and/or a revision case booked that affects the previously operated joint region. The general definition for arthroplasty cases as per the NJRR was used, whereby removal of any significant component of the existing prosthesis with replacement was deemed a failure of the preceding arthroplasty. In the case of infections treated with long-term antibiotics, where the preceding surgical procedure was intended to treat an existing infection, these cases were failed. In cases where DAIR with antibiotic therapy was used for non-septic revisions or primary cases in which an infection has been detected, these have been noted as complications without failing the preceding treatment.
+:::
+
+::: {#progressionend .callout-note}
+Treatment progression end is a term to denote that a treatment record is no longer being actively tracked by the registry team with respect to clinical outcomes or patient-reported outcomes. In this registry, the majority of cases are deceased, or are not contactable by the registry. A smaller number are stage 1 revisions that have transition to stage 2.
+:::
+
+Cumulative recruitment over time was plotted from Registry inception to the present.
+
+```{r}
+#| label: fig-progress
+#| fig-cap: "Cumulative (non-excluded) record creation within COMPRESSOR from inception to present"
+
+
+RecordCount <- dplyr::summarise(
+  STROBEFlow3 |>  dplyr::filter(
+    !(TreatmentStatus == "Archived")
+    ),
+  Count = n(),
+  .by = PatientCreationDate
+) |> arrange(
+  PatientCreationDate
+) |> dplyr::mutate(
+  CumulativeCount = cumsum(Count),
+  PatientCreationNum = as.numeric(PatientCreationDate)
+  ) |> filter(
+    !(PatientCreationDate < ymd("20160701"))
+   
+  )
+
+cumulative_plot <- ggplot(RecordCount, aes(x = PatientCreationDate, y = CumulativeCount)) +
+  geom_line(color = "#2c3e50", linewidth = 1) +
+  # Add the spline fit with confidence interval
+  geom_smooth(method = "gam", formula = y ~ s(x, bs = "cs"), 
+              color = "#e74c3c", linewidth = 1.2, se = TRUE, fill = "#e74c3c", alpha = 0.2) +
+  geom_point(color = "#3498db", size = 1) +
+  # Add labels and title
+  labs(
+    title = "Cumulative Patient Count Over Time",
+    x = "Date",
+    y = "Cumulative Number of Patients",
+    #caption = "Data source: STROBEFlow3"
+  ) +
+  # Improve the theme and formatting
+  theme_minimal() +
+  theme(
+    plot.title = element_text(face = "bold", size = 14),
+    axis.title = element_text(face = "bold"),
+    panel.grid.minor = element_blank()
+  )
+
+# Print the plot
+knitr::knit_print(cumulative_plot)
+
+
+```
+
+The non-linear recruitment progression illustrated in @fig-progress denotes the distinct periods of operation of COMPRESSOR, combined with periods of retrospective chart review of key patient subgroups. The recent increase in recruitment has been facilitated by some reorganisation of the cohort structure of the registry. This has had the side effect of increasing the PROMs eligible pool at the relevant time points.
+
+# Baseline and Demographics
+
+```{r}
+Rev3DPIMaster <- Snapshot |> filter(
+  TreatmentID %in% STROBEFlow$followup  
+) |> left_join(
+  MMMPostcode,
+  join_by(Postcode == postcode),
+  relationship = "many-to-one"
+) |> mutate(
+  across(
+      ComorbHeartDisease_Preop:ComorbOtherMedicalCondition_Preop,
+      ~ case_when(
+        str_detect(.x, "not") ~ 0,
+        str_detect(.x, "not|activities|treatment", negate = TRUE) ~ 1,
+        str_detect(.x, "treatment") ~ 2,
+        str_detect(.x, "activities")~ 3
+      )
+    ),
+    SACQ_score = if_else(
+      rowSums(!is.na(pick(ComorbHeartDisease_Preop:ComorbOtherMedicalCondition_Preop))) == 0L,
+      NA_integer_,
+      rowSums(
+        pick(ComorbHeartDisease_Preop:ComorbOtherMedicalCondition_Preop),
+        na.rm = TRUE
+    )
+    )
+)
+
+
+```
+
+
+
+```{r}
+#| label: tbl-Rev3DPI-demographics
+#| tbl-cap: "Summary of demographics of subvastus cohort"
+
+TableRev3DPIdemo <- gtsummary::tbl_summary(
+  Rev3DPIMaster |> dplyr::select(
+    AgeAtTreatment,
+    Sex,
+    mmm_label,
+    SACQ_score,
+    VR12MCS_Preop,
+    VR12PCS_Preop,
+    EQ5D5LScore_Preop,
+    TreatmentType,
+    TreatmentStatus,
+    DateTreatment
+  ) |> rename(
+    Remoteness = "mmm_label"
+  ),
+  missing = "no",
+  statistic = list(
+    DateTreatment ~ "{min} - {max}"
+  )
+) 
+
+knitr::knit_print(TableRev3DPIdemo)
+```
+# Complications
+
+```{r}
+Rev3DPIComp <- Rev3DPIMaster |> dplyr::select(
+  TreatmentID,
+  DateTreatment,
+  TreatmentStatus,
+  TreatmentStatusNotes,
+  DateStatusChange,
+  ComplicationOccurrence,
+  DateOfOccurrence
+) |> mutate(
+  ComplicationOccur2 = if_else(
+    is.na(ComplicationOccurrence),
+    "No",
+    ComplicationOccurrence
+  ),
+  OccurDelay =  as.numeric(as.duration(interval(ymd(DateTreatment), ymd(DateOfOccurrence))),"days"),
+  Followup = if_else(
+    is.na(DateStatusChange),
+    as.numeric(as.duration(interval(ymd(DateTreatment), ymd(CurrentDate))),"days"),
+    as.numeric(as.duration(interval(ymd(DateTreatment), ymd(DateStatusChange))),"days")
+  )
+)
+
+
+
+```
+
+```{r}
+#| label: tbl-comp
+#| tbl-cap: "Summary of complications incidence after surgery separated by group"
+
+TableRev3DPIComp <- gtsummary::tbl_summary(
+  Rev3DPIComp |> dplyr::select(
+    ComplicationOccur2,
+    OccurDelay,
+    Followup
+  ),
+  missing = "no"
+) |>
+  modify_footnote_body(
+    footnote = "Days",
+    columns = "label",
+    rows = variable == c("OccurDelay","Followup") & row_type == "label"
+  ) |> add_overall()
+
+knitr::knit_print(TableRev3DPIComp)
+
+
+```
+
+Adverse events were detected in 16% of surgical cases performed by SM over the life of the registry as shown in @tbl-comp, with an average detection with 30 days of surgery.
+
+Write complications table for SM review
+
+```{r}
+#| label: write-complic
+#| execute: false
+
+# Authenticate for sheets using the same token
+gs4_auth(token = drive_token())
+
+
+# SubVasComp <- googlesheets4::gs4_create(
+#   "AORA_SubVasComp",
+#   sheets = "Complications"
+# )
+
+Rev3DPIMaster2 <- Rev3DPIMaster |> filter(
+  stringr::str_detect(ComplicationOccurrence,"Yes|Possible")
+)
+
+Rev3DPIComp2 <- ComplicTable |> filter(
+  TreatmentID %in% Rev3DPIMaster2$TreatmentID
+)
+
+sheet_write(
+  Rev3DPIComp2 |> dplyr::select(
+    TreatmentID,
+    ComplicationOccurrence:DateReoperation
+  ),
+  ss = "https://docs.google.com/spreadsheets/d/1PlNK5tVJDTk5zt3tB7SpkVcH5hx2Ezjmo7Y06QZwEiA?usp=drive_fs",
+  sheet = "Complications"
+)
+
+```
+
+
+# Patient reported outcomes
+
+
+```{r}
+Rev3DPIPROMTotal <- Rev3DPIMaster |> reframe(
+  Quartile              = c("n", "p25", "p50", "p75"),
+  Pain_12mth        = c(sum(!is.na(HOOS12_Pain_TotalScore_12months)),   quantile(HOOS12_Pain_TotalScore_12months,   c(0.25,0.5,0.75), na.rm = TRUE)),
+  ADL_12mth        = c(sum(!is.na(HOOS12_DailyLiving_TotalScore_12months)),   quantile(HOOS12_DailyLiving_TotalScore_12months,   c(0.25,0.5,0.75), na.rm = TRUE)),
+  Quality_12mth    = c(sum(!is.na(HOOS12_Quality_TotalScore_12months)),       quantile(HOOS12_Quality_TotalScore_12months,       c(0.25,0.5,0.75), na.rm = TRUE)),
+  Total_12mth      = c(sum(!is.na(HOOS12_Summary_TotalScore_12months)),       quantile(HOOS12_Summary_TotalScore_12months,       c(0.25,0.5,0.75), na.rm = TRUE)),
+  MSTS_12mth        = c(sum(!is.na(MSTSLower_Total_12months)),   quantile(MSTSLower_Total_12months,   c(0.25,0.5,0.75), na.rm = TRUE))
+)
+  
+
+
+```
+
+```{r}
+#| label: tbl-HOOS
+#| tbl-cap: "Summary of HOOS subscales at 6 weeks and 6months"
+
+
+Rev3DPIHOOSTotal |>
+  gt::gt() |>
+  cols_label(
+    Quartile    = "",
+    Pain_12mth   = "Pain",
+    ADL_12mth    = "ADL",
+    Quality_12mth = "Quality",
+    Total_12mth  = "Total"
+  ) |>
+  tab_spanner(
+    label   = "12 Months",
+    columns = c(Pain_12mth, ADL_12mth, Quality_12mth, Total_12mth)
+  ) |>
+  fmt_number(
+    columns  = everything(),
+    rows     = Quartile != "n",
+    decimals = 1
+  ) |>
+  fmt_integer(
+    columns = everything(),
+    rows    = Quartile == "n"
+  ) |>
+  tab_style(
+    style     = cell_text(weight = "bold"),
+    locations = cells_row_groups()
+  ) |>
+  tab_style(
+    style     = cell_borders(sides = "bottom", color = "#d3d3d3", weight = px(1)),
+    locations = cells_body(rows = Quartile == "n")
+  )
+
+```
