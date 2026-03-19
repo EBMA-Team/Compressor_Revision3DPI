@@ -529,9 +529,7 @@ Cumulative recruitment over time was plotted from Registry inception to the pres
 
 
 RecordCount <- dplyr::summarise(
-  STROBEFlow3 |>  dplyr::filter(
-    !(TreatmentStatus == "Archived")
-    ),
+  STROBEFlow2,
   Count = n(),
   .by = PatientCreationDate
 ) |> arrange(
@@ -686,7 +684,7 @@ knitr::knit_print(TableRev3DPIComp)
 
 ```
 
-Adverse events were detected in 16% of surgical cases performed by SM over the life of the registry as shown in @tbl-comp, with an average detection with 30 days of surgery.
+Adverse events were detected in 16% of the cohort as shown in @tbl-comp, with an average detection with 30 days of surgery.
 
 Write complications table for SM review
 
@@ -723,6 +721,48 @@ sheet_write(
 ```
 
 
+```{r}
+#| label: survival-prep-tp
+
+
+Rev3DPIMaster3 <- Rev3DPIMaster |> dplyr::mutate(
+  Status = if_else(
+    TreatmentStatus == "Failed",
+    1,
+    0
+  ),
+  EndDate = case_when(
+    !is.na(DateStatusChange) ~ DateStatusChange,
+    .default = coalesce(DateStatusChange, ymd(CurrentDate)),
+    ),
+  Duration = as.numeric(as.duration(interval(ymd(DateTreatment), ymd(EndDate))),"years"),
+)
+
+```
+
+```{r}
+#| label: fig-survRev3DPI
+#| fig-cap: "Survival curve for Revision 3DPI cases"
+
+
+FigureSurvRev <- survfit2(Surv(Duration, Status) ~ 1,
+                        data = Rev3DPIMaster3
+                        ) |> ggsurvfit(linewidth = 1) +
+  add_confidence_interval() +
+  add_risktable() +
+  labs(
+    x = "Duration (Years)"
+  ) +
+  add_quantile(y_value = 0.5, color = "gray50", linewidth = 0.75) +
+  scale_ggsurvfit() +
+  coord_cartesian(ylim = c(0, 1))
+
+knitr::knit_print(FigureSurvRev)
+
+```
+
+
+
 # Patient reported outcomes
 
 
@@ -745,7 +785,7 @@ Rev3DPIPROMTotal <- Rev3DPIMaster |> reframe(
 #| tbl-cap: "Summary of HOOS subscales at 6 weeks and 6months"
 
 
-Rev3DPIHOOSTotal |>
+Rev3DPIPROMTotal |>
   gt::gt() |>
   cols_label(
     Quartile    = "",
