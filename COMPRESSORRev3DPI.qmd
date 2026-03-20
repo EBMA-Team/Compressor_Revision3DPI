@@ -767,13 +767,88 @@ knitr::knit_print(FigureSurvRev)
 
 
 ```{r}
+
+
+#| label: fig-hoos12-miss
+#| fig-cap: "Missingness of HOOS12 by Timepoint in Surgical Cases of ReinterventionTHA"
+
+
+Rev3DPIMaster4 <- Rev3DPIMaster3 |> rename_with(
+  ~gsub("Atx","At_",.x, fixed = TRUE)
+) |> rename_with(
+  ~gsub("HOOS12_Summary_TotalScore","HOOS12SummaryTotal",.x, fixed = TRUE)
+) |> rename(
+  EligibleAt_Preop = "EligibleAtPreop"
+)
+
+PROMHOOS12 <- Rev3DPIMaster4 |> dplyr::select(
+  TreatmentID,
+  starts_with("HOOS12SummaryTotal"),
+  starts_with("EligibleAt"),
+  -EligibleAtIntraop
+) |> pivot_longer(
+  cols = !TreatmentID,
+  names_to = c(".value","TimePoint"),
+  names_sep = "_",
+  values_drop_na = TRUE
+) |> mutate(
+  TimePoint = factor(TimePoint, levels = c("Preop","3months","6months","12months","24months", "60months", "120months"), ordered = TRUE, exclude = NA),
+  HOOS12SummaryTotal = as.numeric(HOOS12SummaryTotal)
+) |> dplyr::filter(
+  EligibleAt == "Yes",
+  !is.na(TimePoint)
+) |> left_join(
+  Rev3DPIMaster4 |> dplyr::select(
+    TreatmentID,
+    SurgicalTreatment2,
+    TreatmentType,
+    TreatmentStatus
+  ),
+  by = "TreatmentID"
+) |> unite(
+    "TimePointID",
+    c("TreatmentID","TimePoint"),
+    sep = ".",
+    na.rm = FALSE,
+    remove = FALSE
+    )
+
+SampleSizeHOOS12 <- PROMHOOS12 |> 
+  dplyr::filter(
+    SurgicalTreatment2 == "Surgical"
+  ) |> 
+  dplyr::count(TimePoint, name = "n")
+
+FigureHOOSMiss <- gg_miss_fct(PROMHOOS12 |> dplyr::filter(SurgicalTreatment2 == "Surgical") |> dplyr::select(contains("HOOS12SummaryTotal"), TimePoint), TimePoint) + scale_fill_viridis_c(
+    option = "plasma",  # or "inferno", "magma", "cividis"
+    name = "% Missing",
+    limits = c(50, 100)  # Set limits from 0% to 100%
+  ) +
+  geom_text(data = SampleSizeHOOS12, 
+            aes(x = TimePoint, y = 0.7, label = paste0("n=", n)),
+            inherit.aes = FALSE,
+            color = "white", 
+            fontface = "bold",
+            size = 3)
+
+
+
+knitr::knit_print(FigureHOOSMiss)
+
+
+```
+
+
+
+
+```{r}
 Rev3DPIPROMTotal <- Rev3DPIMaster |> reframe(
   Quartile              = c("n", "p25", "p50", "p75"),
-  Pain_12mth        = c(sum(!is.na(HOOS12_Pain_TotalScore_12months)),   quantile(HOOS12_Pain_TotalScore_12months,   c(0.25,0.5,0.75), na.rm = TRUE)),
-  ADL_12mth        = c(sum(!is.na(HOOS12_DailyLiving_TotalScore_12months)),   quantile(HOOS12_DailyLiving_TotalScore_12months,   c(0.25,0.5,0.75), na.rm = TRUE)),
-  Quality_12mth    = c(sum(!is.na(HOOS12_Quality_TotalScore_12months)),       quantile(HOOS12_Quality_TotalScore_12months,       c(0.25,0.5,0.75), na.rm = TRUE)),
-  Total_12mth      = c(sum(!is.na(HOOS12_Summary_TotalScore_12months)),       quantile(HOOS12_Summary_TotalScore_12months,       c(0.25,0.5,0.75), na.rm = TRUE)),
-  MSTS_12mth        = c(sum(!is.na(MSTSLower_Total_12months)),   quantile(MSTSLower_Total_12months,   c(0.25,0.5,0.75), na.rm = TRUE))
+  Pain_24mth        = c(sum(!is.na(HOOS12_Pain_TotalScore_24months)),   quantile(HOOS12_Pain_TotalScore_24months,   c(0.25,0.5,0.75), na.rm = TRUE)),
+  ADL_24mth        = c(sum(!is.na(HOOS12_DailyLiving_TotalScore_12months)),   quantile(HOOS12_DailyLiving_TotalScore_24months,   c(0.25,0.5,0.75), na.rm = TRUE)),
+  Quality_24mth    = c(sum(!is.na(HOOS12_Quality_TotalScore_24months)),       quantile(HOOS12_Quality_TotalScore_24months,       c(0.25,0.5,0.75), na.rm = TRUE)),
+  Total_24mth      = c(sum(!is.na(HOOS12_Summary_TotalScore_24months)),       quantile(HOOS12_Summary_TotalScore_24months,       c(0.25,0.5,0.75), na.rm = TRUE)),
+  MSTS_24mth        = c(sum(!is.na(MSTSLower_Total_24months)),   quantile(MSTSLower_Total_24months,   c(0.25,0.5,0.75), na.rm = TRUE))
 )
   
 
@@ -782,21 +857,21 @@ Rev3DPIPROMTotal <- Rev3DPIMaster |> reframe(
 
 ```{r}
 #| label: tbl-HOOS
-#| tbl-cap: "Summary of HOOS subscales at 6 weeks and 6months"
+#| tbl-cap: "Summary of HOOS subscales at 24months"
 
 
 Rev3DPIPROMTotal |>
   gt::gt() |>
   cols_label(
     Quartile    = "",
-    Pain_12mth   = "Pain",
-    ADL_12mth    = "ADL",
-    Quality_12mth = "Quality",
-    Total_12mth  = "Total"
+    Pain_24mth   = "Pain",
+    ADL_24mth    = "ADL",
+    Quality_24mth = "Quality",
+    Total_24mth  = "Total"
   ) |>
   tab_spanner(
-    label   = "12 Months",
-    columns = c(Pain_12mth, ADL_12mth, Quality_12mth, Total_12mth)
+    label   = "24 Months",
+    columns = c(Pain_24mth, ADL_24mth, Quality_24mth, Total_24mth)
   ) |>
   fmt_number(
     columns  = everything(),
