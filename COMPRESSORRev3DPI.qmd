@@ -849,6 +849,11 @@ Rev3DPIPROMTotal <- Rev3DPIMaster |> reframe(
   Quality_24mth    = c(sum(!is.na(HOOS12_Quality_TotalScore_24months)),       quantile(HOOS12_Quality_TotalScore_24months,       c(0.25,0.5,0.75), na.rm = TRUE)),
   Total_24mth      = c(sum(!is.na(HOOS12_Summary_TotalScore_24months)),       quantile(HOOS12_Summary_TotalScore_24months,       c(0.25,0.5,0.75), na.rm = TRUE)),
   MSTS_24mth        = c(sum(!is.na(MSTSLower_Total_24months)),   quantile(MSTSLower_Total_24months,   c(0.25,0.5,0.75), na.rm = TRUE))
+  # Pain_60mth        = c(sum(!is.na(HOOS12_Pain_TotalScore_60months)),   quantile(HOOS12_Pain_TotalScore_60months,   c(0.25,0.5,0.75), na.rm = TRUE)),
+  # ADL_60mth        = c(sum(!is.na(HOOS12_DailyLiving_TotalScore_60months)),   quantile(HOOS12_DailyLiving_TotalScore_60months,   c(0.25,0.5,0.75), na.rm = TRUE)),
+  # Quality_60mth    = c(sum(!is.na(HOOS12_Quality_TotalScore_60months)),       quantile(HOOS12_Quality_TotalScore_60months,       c(0.25,0.5,0.75), na.rm = TRUE)),
+  # Total_60mth      = c(sum(!is.na(HOOS12_Summary_TotalScore_60months)),       quantile(HOOS12_Summary_TotalScore_60months,       c(0.25,0.5,0.75), na.rm = TRUE)),
+  # MSTS_60mth        = c(sum(!is.na(MSTSLower_Total_60months)),   quantile(MSTSLower_Total_60months,   c(0.25,0.5,0.75), na.rm = TRUE))
 )
   
 
@@ -857,22 +862,31 @@ Rev3DPIPROMTotal <- Rev3DPIMaster |> reframe(
 
 ```{r}
 #| label: tbl-HOOS
-#| tbl-cap: "Summary of HOOS subscales at 24months"
+#| tbl-cap: "Summary of HOOS subscales at 2 and 5 years"
 
 
 Rev3DPIPROMTotal |>
   gt::gt() |>
   cols_label(
     Quartile    = "",
-    Pain_24mth   = "Pain",
-    ADL_24mth    = "ADL",
+    Pain_24mth    = "Pain",
+    ADL_24mth     = "ADL",
     Quality_24mth = "Quality",
-    Total_24mth  = "Total"
+    Total_24mth   = "Total"
+    # Pain_60mth   = "Pain",
+    # ADL_60mth    = "ADL",
+    # Quality_60mth = "Quality",
+    # Total_60mth  = "Total"
   ) |>
   tab_spanner(
-    label   = "24 Months",
+    label   = "2 years",
     columns = c(Pain_24mth, ADL_24mth, Quality_24mth, Total_24mth)
   ) |>
+  # ) |>
+  # tab_spanner(
+  #   label   = "5 years",
+  #   columns = c(Pain_60mth, ADL_60mth, Quality_60mth, Total_60mth)
+  # ) |>
   fmt_number(
     columns  = everything(),
     rows     = Quartile != "n",
