@@ -362,7 +362,6 @@ COMPRESSOR (Complex Reconstructive Surgery Outcomes Registry) is a clinical qual
 
 It should be noted that collection of PROMs has been heavily restricted for this registry due to concerns over appropriateness to follow up patients at high-risk of mortality or other contraindications for completing scores. These restrictions have only recently been lifted, and only then for cases receiving hardware components of interest (Ossis, Stryker GMRS-MRH).
 
-
 # Recruitment Flow
 
 Flowcharts as per STROBE [@Vandenbroucke2007] and RECORD [@Benchimol2015] guidelines were generated for treatments enrolled into the Registry. Followup was set to eligibility at *any postoperative timepoint*.
@@ -512,8 +511,6 @@ knitr::knit_print(STROBEPlot1)
 
 ```
 
-
-
 The flowcharts were separated into two components (@fig-strobe-cohort1 and @fig-strobe-cohort2) and exclusions noted for patients that were labelled as a procedure failure.
 
 ::: {#procedurefailure .callout-note}
@@ -606,8 +603,6 @@ Rev3DPIMaster <- Snapshot |> filter(
 
 ```
 
-
-
 ```{r}
 #| label: tbl-Rev3DPI-demographics
 #| tbl-cap: "Summary of demographics of subvastus cohort"
@@ -635,6 +630,7 @@ TableRev3DPIdemo <- gtsummary::tbl_summary(
 
 knitr::knit_print(TableRev3DPIdemo)
 ```
+
 # Complications
 
 ```{r}
@@ -723,6 +719,7 @@ sheet_write(
 
 ```
 
+# Index procedure survival
 
 ```{r}
 #| label: survival-prep-tp
@@ -766,10 +763,31 @@ knitr::knit_print(FigureSurvRev)
 
 ```
 
+## Henderson rating
 
+Cases that were identified as meeting failure criteria in the registry were reviewed further and labelled according to Henderson criteria [@henderson2014].
+
+```{r}
+Rev3DPIFail <- Rev3DPIMaster4 |> filter(
+  TreatmentStatus == "Failed"
+) |> dplyr::select(
+  TreatmentID,
+  DateTreatment,
+  RegistryCohortName,
+  DateStatusChange,
+  TreatmentStatusNotes
+) |> dplyr::mutate(
+  Phase = as.numeric(as.duration(interval(ymd(DateTreatment), ymd(DateStatusChange))),"years"),
+  )
+```
+
+```{epoxy}
+
+There were 2 cases of dislocation and a failure of an adjacent femoral replacement that could not be rated with the Henderson system in relation to the 3DPI component. There was one case of loosening at 6.6 years followup (Henderson 2B) and one at 6 months (Henderson 2A). One case of periprosthetic infection (Henderson 4A) presented at 10 months. 
+
+```
 
 # Patient reported outcomes
-
 
 ```{r}
 
@@ -842,9 +860,6 @@ knitr::knit_print(FigureHOOSMiss)
 
 
 ```
-
-
-
 
 ```{r}
 Rev3DPIPROMTotal <- Rev3DPIMaster |> reframe(
