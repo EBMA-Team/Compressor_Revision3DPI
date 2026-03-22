@@ -363,7 +363,7 @@ COMPRESSOR (Complex Reconstructive Surgery Outcomes Registry) is a clinical qual
 It should be noted that collection of PROMs has been heavily restricted for this registry due to concerns over appropriateness to follow up patients at high-risk of mortality or other contraindications for completing scores. These restrictions have only recently been lifted, and only then for cases receiving hardware components of interest (Ossis, Stryker GMRS-MRH).
 
 
-# Recruitment Flow by Region
+# Recruitment Flow
 
 Flowcharts as per STROBE [@Vandenbroucke2007] and RECORD [@Benchimol2015] guidelines were generated for treatments enrolled into the Registry. Followup was set to eligibility at *any postoperative timepoint*.
 
@@ -419,7 +419,7 @@ STROBEFlow <- STROBEInput  |> dplyr::left_join(# Join with relevant columns from
         TreatmentID,
         CombID,
         EligibleAtPreop,
-        EligibleAtx12months,
+        EligibleAtx24months,
         SurgicalTreatment2
       ) |> 
       # Convert all date columns to date format
@@ -435,11 +435,9 @@ STROBEFlow <- STROBEInput  |> dplyr::left_join(# Join with relevant columns from
   )
   ) |> dplyr::mutate(
     exclusion1 = case_when(
-    stringr::str_detect(RegistryCohortName,"TumourPelvis|ReinterventionTHA|General", negate = TRUE) | is.na(RegistryCohortName) ~ "Not an indication of interest",
-    stringr::str_detect(RegistryCohortName,"TumourPelvis|ReinterventionTHA|General") & (stringr::str_detect(str_to_lower(AnalysisLabel),"ossis", negate = TRUE) | is.na(AnalysisLabel)) ~ "Not hardware of interest",
-    stringr::str_detect(RegistryCohortName,"TumourPelvis|ReinterventionTHA|General") & stringr::str_detect(str_to_lower(AnalysisLabel),"ossis") & (SurgicalTreatment2 != "Surgical" | is.na(SurgicalTreatment2) | str_detect(TreatmentStatus,"Pending")) ~ "Not a surgical treatment",
-stringr::str_detect(RegistryCohortName,"TumourPelvis|ReinterventionTHA|General") & stringr::str_detect(str_to_lower(AnalysisLabel),"ossis") & SurgicalTreatment2 == "Surgical" & stringr::str_detect(RegistryStatus,"Opt") ~ "Patient Opt-out",
-stringr::str_detect(RegistryCohortName,"TumourPelvis|ReinterventionTHA|General") & stringr::str_detect(str_to_lower(AnalysisLabel),"ossis") & SurgicalTreatment2 == "Surgical" & stringr::str_detect(RegistryStatus,"Opt", negate = TRUE) & TreatmentType == "Primary" ~ "Non-revision indication",
+      SurgicalTreatment2 != "Surgical" | is.na(SurgicalTreatment2) ~ "Non-Surgical Record",
+      SurgicalTreatment2 == "Surgical" & (stringr::str_detect(str_to_lower(AnalysisLabel),"ossis", negate = TRUE) | is.na(AnalysisLabel)) ~ "Not hardware of interest",
+      stringr::str_detect(str_to_lower(AnalysisLabel),"ossis") & SurgicalTreatment2 == "Surgical" & TreatmentType == "Primary" ~ "Non-revision indication",
     .default = NA_character_
   ),
   induction = if_else(
@@ -457,18 +455,23 @@ stringr::str_detect(RegistryCohortName,"TumourPelvis|ReinterventionTHA|General")
     Count = row_number()
   )|> ungroup() |> mutate(
 exclusion2 = case_when(
-  #!is.na(induction) & is.na(Approach) ~ "No data entered",
-  Count >1 ~ "Not Index Procedure",
+  TreatmentID == "58.3" ~ "Primary indication tumour",
+  TreatmentID == "58.5" ~ "Not an index hardware procedure",
+  TreatmentID == "56.2" ~ "Not a revision arthroplasty",
+  TreatmentID == "1532.1" ~ "Non-pelvis indication",
+  TreatmentID == "1889.1" ~ "Not an index hardware procedure",
+  TreatmentID == "1889.2" ~ "Not an index hardware procedure",
 ),
 followup = if_else(
   is.na(exclusion1) & is.na(exclusion2),
   TreatmentID,
   NA_character_
 ),
-lost_followup = if_else(
-  EligibleAtx12months != "Yes" | is.na(EligibleAtx12months),
-  TreatmentStatusNotes,
-  NA_character_
+lost_followup = case_when(
+  (EligibleAtx24months != "Yes" | is.na(EligibleAtx24months)) & stringr::str_detect(str_to_lower(TreatmentStatusNotes),"decease|mortality") ~ "Mortality",
+  (EligibleAtx24months != "Yes" | is.na(EligibleAtx24months)) & stringr::str_detect(str_to_lower(TreatmentStatusNotes),"dislocat|infect|fixation|loose") ~ "Failure or Revision",
+  (EligibleAtx24months != "Yes" | is.na(EligibleAtx24months)) & stringr::str_detect(str_to_lower(TreatmentStatusNotes),"surgeon") ~ "Non-participating surgeon",
+  .default = NA_character_
 ),
 mitt = if_else(
     !is.na(followup) & is.na(lost_followup),
@@ -755,7 +758,9 @@ FigureSurvRev <- survfit2(Surv(Duration, Status) ~ 1,
   ) +
   add_quantile(y_value = 0.5, color = "gray50", linewidth = 0.75) +
   scale_ggsurvfit() +
-  coord_cartesian(ylim = c(0, 1))
+  coord_cartesian(
+    ylim = c(0.5, 1),
+    xlim = c(0,10))
 
 knitr::knit_print(FigureSurvRev)
 
@@ -845,7 +850,7 @@ knitr::knit_print(FigureHOOSMiss)
 Rev3DPIPROMTotal <- Rev3DPIMaster |> reframe(
   Quartile              = c("n", "p25", "p50", "p75"),
   Pain_24mth        = c(sum(!is.na(HOOS12_Pain_TotalScore_24months)),   quantile(HOOS12_Pain_TotalScore_24months,   c(0.25,0.5,0.75), na.rm = TRUE)),
-  ADL_24mth        = c(sum(!is.na(HOOS12_DailyLiving_TotalScore_12months)),   quantile(HOOS12_DailyLiving_TotalScore_24months,   c(0.25,0.5,0.75), na.rm = TRUE)),
+  ADL_24mth        = c(sum(!is.na(HOOS12_DailyLiving_TotalScore_24months)),   quantile(HOOS12_DailyLiving_TotalScore_24months,   c(0.25,0.5,0.75), na.rm = TRUE)),
   Quality_24mth    = c(sum(!is.na(HOOS12_Quality_TotalScore_24months)),       quantile(HOOS12_Quality_TotalScore_24months,       c(0.25,0.5,0.75), na.rm = TRUE)),
   Total_24mth      = c(sum(!is.na(HOOS12_Summary_TotalScore_24months)),       quantile(HOOS12_Summary_TotalScore_24months,       c(0.25,0.5,0.75), na.rm = TRUE)),
   MSTS_24mth        = c(sum(!is.na(MSTSLower_Total_24months)),   quantile(MSTSLower_Total_24months,   c(0.25,0.5,0.75), na.rm = TRUE))
@@ -862,7 +867,7 @@ Rev3DPIPROMTotal <- Rev3DPIMaster |> reframe(
 
 ```{r}
 #| label: tbl-HOOS
-#| tbl-cap: "Summary of HOOS subscales at 2 and 5 years"
+#| tbl-cap: "Summary of HOOS subscales at 2 years"
 
 
 Rev3DPIPROMTotal |>
