@@ -606,7 +606,7 @@ Rev3DPIMaster <- Snapshot |> filter(
 
 ```{r}
 #| label: tbl-Rev3DPI-demographics
-#| tbl-cap: "Summary of demographics of subvastus cohort"
+#| tbl-cap: "Summary of demographics of 3DPI cohort performed for revision indication"
 
 TableRev3DPIdemo <- gtsummary::tbl_summary(
   Rev3DPIMaster |> dplyr::select(
@@ -659,7 +659,7 @@ Rev3DPIComp <- Rev3DPIMaster |> dplyr::select(
 
 ```{r}
 #| label: tbl-comp
-#| tbl-cap: "Summary of complications incidence after surgery separated by group"
+#| tbl-cap: "Summary of complications incidence after 3DPI surgery for revision indication"
 
 TableRev3DPIComp <- gtsummary::tbl_summary(
   Rev3DPIComp |> dplyr::select(
