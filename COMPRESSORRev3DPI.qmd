@@ -460,6 +460,7 @@ exclusion2 = case_when(
   TreatmentID == "1532.1" ~ "Non-pelvis indication",
   TreatmentID == "1889.1" ~ "Not an index hardware procedure",
   TreatmentID == "1889.2" ~ "Not an index hardware procedure",
+  TreatmentID == "132.2" ~ "Not an index hardware procedure"
 ),
 followup = if_else(
   is.na(exclusion1) & is.na(exclusion2),
@@ -612,10 +613,6 @@ TableRev3DPIdemo <- gtsummary::tbl_summary(
     AgeAtTreatment,
     Sex,
     mmm_label,
-    SACQ_score,
-    VR12MCS_Preop,
-    VR12PCS_Preop,
-    EQ5D5LScore_Preop,
     TreatmentType,
     TreatmentStatus,
     DateTreatment
@@ -683,7 +680,7 @@ knitr::knit_print(TableRev3DPIComp)
 
 ```
 
-Adverse events were detected in 43% of the cohort as shown in @tbl-comp, with an average detection with 30 days of surgery.
+Adverse events were detected in 46.7% of the cohort as shown in @tbl-comp, with an average detection with 30 days of surgery.
 
 Write complications table for RB review
 
@@ -727,7 +724,7 @@ sheet_write(
 
 Rev3DPIMaster3 <- Rev3DPIMaster |> dplyr::mutate(
   Status = if_else(
-    TreatmentStatus == "Failed",
+    TreatmentStatus == "Failed" & (TreatmentID == "161.1" | TreatmentID == "52.1"),
     1,
     0
   ),
@@ -768,7 +765,7 @@ knitr::knit_print(FigureSurvRev)
 Cases that were identified as meeting failure criteria in the registry were reviewed further and labelled according to Henderson criteria [@henderson2014].
 
 ```{r}
-Rev3DPIFail <- Rev3DPIMaster4 |> filter(
+Rev3DPIFail <- Rev3DPIMaster3 |> filter(
   TreatmentStatus == "Failed"
 ) |> dplyr::select(
   TreatmentID,
@@ -783,15 +780,13 @@ Rev3DPIFail <- Rev3DPIMaster4 |> filter(
 
 ```{epoxy}
 
-There were 2 cases of dislocation and a failure of an adjacent femoral replacement that could not be rated with the Henderson system in relation to the 3DPI component. There was one case of loosening at 6.6 years followup (Henderson 2B) and one at 6 months (Henderson 2A). One case of periprosthetic infection (Henderson 4A) presented at 10 months. 
+There were 2 cases of dislocation (Henderson 1A) and a failure of an adjacent femoral replacement that could not be rated with the Henderson system in relation to the 3DPI component. There was one case of loosening at 6.6 years followup (Henderson 2B) and one at 6 months (Henderson 2A). One case of periprosthetic infection (Henderson 4A) presented at 10 months. 
 
 ```
 
 # Patient reported outcomes
 
 ```{r}
-
-
 #| label: fig-hoos12-miss
 #| fig-cap: "Missingness of HOOS12 by Timepoint in Surgical Cases of ReinterventionTHA"
 
