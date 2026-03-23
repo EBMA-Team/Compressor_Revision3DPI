@@ -628,6 +628,85 @@ TableRev3DPIdemo <- gtsummary::tbl_summary(
 knitr::knit_print(TableRev3DPIdemo)
 ```
 
+# Indications
+
+```{r}
+Rev3DPIIndicat <- Rev3DPIMaster |> dplyr::select(
+  TreatmentID,
+  DiagnosisRawFinal,
+  DiagnosisRawPrelim,
+  EBMAComment,
+  DateTreatment
+) |> mutate(
+  ECI = if_else(stringr::str_detect(str_to_lower(DiagnosisRawFinal),"extracorporeal"), "Yes","No"),
+  Infection = if_else(stringr::str_detect(str_to_lower(DiagnosisRawFinal),"infect"), "Yes","No"),
+  Loose = if_else(stringr::str_detect(str_to_lower(DiagnosisRawFinal),"loose|migrat"), "Yes","No"),
+  Dislocation = if_else(stringr::str_detect(str_to_lower(DiagnosisRawFinal),"dislocat"), "Yes","No"),
+  Hardware = if_else(stringr::str_detect(str_to_lower(DiagnosisRawFinal),"wear|poly|break"), "Yes","No"),
+  BoneLoss = if_else(stringr::str_detect(str_to_lower(DiagnosisRawFinal),"necrosis|bone.loss|resorp"), "Yes","No"),
+)
+```
+
+```{r}
+#| label: tbl-indication-summary
+#| tbl-cap: "Revision 3DPI — Frequency and Percentage of Diagnosis Indications"
+Rev3DPIIndicatSummary <- Rev3DPIIndicat |>
+  summarise(
+    across(
+      c(ECI, Infection, Loose, Dislocation, Hardware, BoneLoss),
+      list(
+        n    = \(x) sum(x == "Yes", na.rm = TRUE),
+        pct  = \(x) round(mean(x == "Yes", na.rm = TRUE) * 100, 1)
+      ),
+      .names = "{.col}_{.fn}"
+    )
+  ) |>
+  pivot_longer(
+    everything(),
+    names_to  = c("Indicator", ".value"),
+    names_sep = "_"
+  ) |>
+  arrange(desc(pct))
+
+Rev3DPIIndicatSummary |>
+  gt() |>
+  cols_label(
+    Indicator = "Indication",
+    n         = "n",
+    pct       = "% of Total"
+  ) |>
+  fmt_number(
+    columns = n,
+    decimals = 0
+  ) |>
+  fmt_number(
+    columns  = pct,
+    decimals = 1
+  ) |>
+  cols_align(
+    align   = "left",
+    columns = Indicator
+  ) |>
+  cols_align(
+    align   = "center",
+    columns = c(n, pct)
+  ) |>
+  data_color(
+    columns = pct,
+    method  = "numeric",
+    palette = "Blues"
+  ) |>
+  tab_style(
+    style     = cell_text(weight = "bold"),
+    locations = cells_column_labels()
+  ) |>
+  tab_source_note(
+    source_note = md("*Percentages calculated from total treatments. Multiple indications may apply per case.*")
+  )
+```
+
+
+
 # Complications
 
 ```{r}
