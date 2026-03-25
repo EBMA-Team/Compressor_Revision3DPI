@@ -705,8 +705,6 @@ Rev3DPIIndicatSummary |>
   )
 ```
 
-
-
 # Complications
 
 ```{r}
@@ -880,28 +878,36 @@ Rev3DPIMaster4 <- Rev3DPIMaster3 |> rename_with(
 
 PROMHOOS12 <- Rev3DPIMaster4 |> dplyr::select(
   TreatmentID,
+  PatientID,
   starts_with("HOOS12SummaryTotal"),
   starts_with("EligibleAt"),
-  -EligibleAtIntraop
+  -EligibleAtIntraop,
+  TreatmentType,
+  TreatmentStatus,
+  SurgicalTreatment2,
+  TreatmentStatusNotes
+) |> left_join(
+  PatientTable |> dplyr::select(
+    PatientID,
+    Email
+  ),
+  by = "PatientID"
 ) |> pivot_longer(
-  cols = !TreatmentID,
+  cols = !(c(TreatmentID,PatientID,Email,TreatmentType,TreatmentStatus,SurgicalTreatment2,TreatmentStatusNotes)),
   names_to = c(".value","TimePoint"),
   names_sep = "_",
   values_drop_na = TRUE
 ) |> mutate(
-  TimePoint = factor(TimePoint, levels = c("Preop","3months","6months","12months","24months", "60months", "120months"), ordered = TRUE, exclude = NA),
-  HOOS12SummaryTotal = as.numeric(HOOS12SummaryTotal)
+  TimePoint = forcats::fct(TimePoint, levels = c("Preop","3months","6months","12months","24months", "60months", "120months")),
+  HOOS12SummaryTotal = as.numeric(HOOS12SummaryTotal),
+  EligibleAt2 = case_when(
+    is.na(Email) ~ "No",
+    stringr::str_detect(TreatmentStatusNotes,"Non-registry") ~ "No",
+    .default = "Yes"
+  )
 ) |> dplyr::filter(
-  EligibleAt == "Yes",
+  EligibleAt2 == "Yes",
   !is.na(TimePoint)
-) |> left_join(
-  Rev3DPIMaster4 |> dplyr::select(
-    TreatmentID,
-    SurgicalTreatment2,
-    TreatmentType,
-    TreatmentStatus
-  ),
-  by = "TreatmentID"
 ) |> unite(
     "TimePointID",
     c("TreatmentID","TimePoint"),
@@ -910,21 +916,18 @@ PROMHOOS12 <- Rev3DPIMaster4 |> dplyr::select(
     remove = FALSE
     )
 
-SampleSizeHOOS12 <- PROMHOOS12 |> 
-  dplyr::filter(
-    SurgicalTreatment2 == "Surgical"
-  ) |> 
+SampleSizeHOOS12 <- PROMHOOS12 |>
   dplyr::count(TimePoint, name = "n")
 
 FigureHOOSMiss <- gg_miss_fct(PROMHOOS12 |> dplyr::filter(SurgicalTreatment2 == "Surgical") |> dplyr::select(contains("HOOS12SummaryTotal"), TimePoint), TimePoint) + scale_fill_viridis_c(
     option = "plasma",  # or "inferno", "magma", "cividis"
     name = "% Missing",
-    limits = c(50, 100)  # Set limits from 0% to 100%
+    limits = c(20, 100)  # Set limits from 0% to 100%
   ) +
-  geom_text(data = SampleSizeHOOS12, 
+  geom_text(data = SampleSizeHOOS12,
             aes(x = TimePoint, y = 0.7, label = paste0("n=", n)),
             inherit.aes = FALSE,
-            color = "white", 
+            color = "white",
             fontface = "bold",
             size = 3)
 
@@ -942,8 +945,8 @@ Rev3DPIPROMTotal <- Rev3DPIMaster |> reframe(
   ADL_24mth        = c(sum(!is.na(HOOS12_DailyLiving_TotalScore_24months)),   quantile(HOOS12_DailyLiving_TotalScore_24months,   c(0.25,0.5,0.75), na.rm = TRUE)),
   Quality_24mth    = c(sum(!is.na(HOOS12_Quality_TotalScore_24months)),       quantile(HOOS12_Quality_TotalScore_24months,       c(0.25,0.5,0.75), na.rm = TRUE)),
   Total_24mth      = c(sum(!is.na(HOOS12_Summary_TotalScore_24months)),       quantile(HOOS12_Summary_TotalScore_24months,       c(0.25,0.5,0.75), na.rm = TRUE)),
-  MSTS_24mth        = c(sum(!is.na(MSTSLower_Total_24months)),   quantile(MSTSLower_Total_24months,   c(0.25,0.5,0.75), na.rm = TRUE))
-  # Pain_60mth        = c(sum(!is.na(HOOS12_Pain_TotalScore_60months)),   quantile(HOOS12_Pain_TotalScore_60months,   c(0.25,0.5,0.75), na.rm = TRUE)),
+  MSTS_24mth        = c(sum(!is.na(MSTSLower_Total_24months)),   quantile(MSTSLower_Total_24months,   c(0.25,0.5,0.75), na.rm = TRUE)),
+ EQ5D5L_24mth       = c(sum(!is.na(EQ5D5LScore_24months)),   quantile(EQ5D5LScore_24months,   c(0.25,0.5,0.75), na.rm = TRUE))
   # ADL_60mth        = c(sum(!is.na(HOOS12_DailyLiving_TotalScore_60months)),   quantile(HOOS12_DailyLiving_TotalScore_60months,   c(0.25,0.5,0.75), na.rm = TRUE)),
   # Quality_60mth    = c(sum(!is.na(HOOS12_Quality_TotalScore_60months)),       quantile(HOOS12_Quality_TotalScore_60months,       c(0.25,0.5,0.75), na.rm = TRUE)),
   # Total_60mth      = c(sum(!is.na(HOOS12_Summary_TotalScore_60months)),       quantile(HOOS12_Summary_TotalScore_60months,       c(0.25,0.5,0.75), na.rm = TRUE)),
@@ -955,7 +958,7 @@ Rev3DPIPROMTotal <- Rev3DPIMaster |> reframe(
 ```
 
 ```{r}
-#| label: tbl-HOOS
+#| label: tbl-PROM
 #| tbl-cap: "Summary of HOOS subscales at 2 years"
 
 
@@ -966,8 +969,8 @@ Rev3DPIPROMTotal |>
     Pain_24mth    = "Pain",
     ADL_24mth     = "ADL",
     Quality_24mth = "Quality",
-    Total_24mth   = "Total"
-    # Pain_60mth   = "Pain",
+    Total_24mth   = "Total",
+    EQ5D5L_24mth   = "EQ5D"
     # ADL_60mth    = "ADL",
     # Quality_60mth = "Quality",
     # Total_60mth  = "Total"
@@ -982,9 +985,14 @@ Rev3DPIPROMTotal |>
   #   columns = c(Pain_60mth, ADL_60mth, Quality_60mth, Total_60mth)
   # ) |>
   fmt_number(
-    columns  = everything(),
+    columns  = c(Pain_24mth,ADL_24mth,Quality_24mth,Total_24mth,MSTS_24mth),
     rows     = Quartile != "n",
     decimals = 1
+  ) |>
+  fmt_number(
+    columns  = "EQ5D5L_24mth",
+    rows     = Quartile != "n",
+    decimals = 3
   ) |>
   fmt_integer(
     columns = everything(),
@@ -1000,3 +1008,5 @@ Rev3DPIPROMTotal |>
   )
 
 ```
+
+
