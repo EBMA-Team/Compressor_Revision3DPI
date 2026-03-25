@@ -1010,3 +1010,162 @@ Rev3DPIPROMTotal |>
 ```
 
 
+```{r}
+#| label: tbl-eq5d
+#| tbl-cap: "Summary of EQ5D responses at 2 years"
+
+library(tidyverse)
+library(gt)
+library(naniar)
+library(epoxy)
+
+# ── 1. Inspect missingness ────────────────────────────────────────────────────
+# miss_summary <- EQ5DMaster |>
+#   select(ends_with("_24months"), -EQ5D5LVAS_24months, -EQ5D5LScore_24months) |>
+#   miss_var_summary()
+# 
+# epoxy("Missing data summary for EQ-5D dimensions:")
+# print(miss_summary)
+
+# ── 2. Recode long responses to short labels ──────────────────────────────────
+# ── 3. Build recoded data and pivot to proportion table ───────────────────────
+level_order <- c("No problems", "Slight", "Moderate", "Severe", "Unable")
+
+# All five domains share the same severity adverbs — one function covers all
+recode_eq5d <- \(x) case_when(
+  str_detect(x, regex("no problems|no pain|not anxious",        ignore_case = TRUE)) ~ "No problems",
+  str_detect(x, regex("slight",                                 ignore_case = TRUE)) ~ "Slight",
+  str_detect(x, regex("moderate",                               ignore_case = TRUE)) ~ "Moderate",
+  str_detect(x, regex("severe",                                 ignore_case = TRUE)) ~ "Severe",
+  str_detect(x, regex("unable|extreme",                         ignore_case = TRUE)) ~ "Unable"
+)
+
+eq5d_recoded <- EQ5DMaster |>
+  select(ends_with("_24months"), -EQ5D5LVAS_24months, -EQ5D5LScore_24months) |>
+  mutate(across(everything(), recode_eq5d)) |>
+  rename(
+    Mobility    = EQ5D5LMobility_24months,
+    `Self-care` = EQ5D5LSelfcare_24months,
+    Activity    = EQ5D5LActivity_24months,
+    Pain        = EQ5D5LPain_24months,
+    Anxiety     = EQ5D5LAnxiety_24months
+  )
+
+prop_table <- eq5d_recoded |>
+  pivot_longer(
+    cols      = everything(),
+    names_to  = "Domain",
+    values_to = "Response"
+  ) |>
+  filter(!is.na(Response), Response != "Missing") |>
+  mutate(
+    Response = factor(Response, levels = level_order),
+    Domain   = factor(Domain, levels = c("Mobility", "Self-care", "Activity", "Pain", "Anxiety"))
+  ) |>
+  group_by(Domain) |>
+  mutate(n_domain = n()) |>
+  count(Domain, Response, n_domain, .drop = FALSE) |>
+  mutate(prop = n / n_domain) |>
+  select(-n, -n_domain) |>
+  pivot_wider(
+    names_from  = Response,
+    values_from = prop,
+    values_fill = 0
+  )
+
+# n per domain for subtitle footnote
+n_per_domain <- eq5d_recoded |>
+  pivot_longer(everything(), names_to = "Domain", values_to = "Response") |>
+  filter(!is.na(Response), Response != "Missing") |>
+  count(Domain, name = "n_valid")
+
+# ── 4. Build gt table ─────────────────────────────────────────────────────────
+
+# Colour palette per column (green → red)
+col_palette <- list(
+  "No problems" = c("#d4edda", "#28a745"),
+  "Slight"      = c("#fff3cd", "#e0a800"),
+  "Moderate"    = c("#fde5cc", "#e07b00"),
+  "Severe"      = c("#f8d7da", "#dc3545"),
+  "Unable"      = c("#e8d5f5", "#6f42c1")
+)
+
+gt_table <- prop_table |>
+  gt(rowname_col = "Domain", groupname_col = NA) |>
+  tab_header(
+    title    = "EQ-5D-5L Responses at 24 Months",
+    subtitle = "Proportions calculated over non-missing responses per domain"
+  ) |>
+  fmt_percent(
+    columns  = all_of(level_order),
+    decimals = 0
+  ) |>
+  tab_spanner(
+    label   = "Response Level",
+    columns = all_of(level_order)
+  ) |>
+  cols_label(
+    `No problems` = "No problems",
+    Slight        = "Slight",
+    Moderate      = "Moderate",
+    Severe        = "Severe",
+    Unable        = "Unable"
+  )
+  # Apply background colour scales per column
+  data_color(
+    columns = "No problems",
+    rows    = everything(),
+    method  = "numeric",
+    palette = col_palette[["No problems"]],
+    domain  = c(0, 1)
+  ) |>
+  data_color(
+    columns = "Slight",
+    rows    = everything(),
+    method  = "numeric",
+    palette = col_palette[["Slight"]],
+    domain  = c(0, 1)
+  ) |>
+  data_color(
+    columns = "Moderate",
+    rows    = everything(),
+    method  = "numeric",
+    palette = col_palette[["Moderate"]],
+    domain  = c(0, 1)
+  ) |>
+  data_color(
+    columns = "Severe",
+    rows    = everything(),
+    method  = "numeric",
+    palette = col_palette[["Severe"]],
+    domain  = c(0, 1)
+  ) |>
+  data_color(
+    columns = "Unable",
+    rows    = everything(),
+    method  = "numeric",
+    palette = col_palette[["Unable"]],
+    domain  = c(0, 1)
+  ) |>
+  tab_style(
+    style = cell_text(weight = "bold"),
+    locations = cells_column_labels()
+  ) |>
+  tab_style(
+    style = cell_text(weight = "bold"),
+    locations = cells_stub()
+  ) |>
+  tab_options(
+    heading.background.color      = "#2c3e50",
+    heading.title.font.size       = px(16),
+    heading.subtitle.font.size    = px(12),
+    column_labels.background.color = "#ecf0f1",
+    table.border.top.color        = "#2c3e50",
+    table.border.bottom.color     = "#2c3e50",
+    stub.border.color             = "#dee2e6"
+  )
+
+gt_table
+
+```
+
