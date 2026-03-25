@@ -1019,6 +1019,10 @@ library(gt)
 library(naniar)
 library(epoxy)
 
+EQ5DMaster <- Rev3DPIMaster4 |> dplyr::select(
+  starts_with("EQ5D") & ends_with("24months")
+)
+
 # ── 1. Inspect missingness ────────────────────────────────────────────────────
 # miss_summary <- EQ5DMaster |>
 #   select(ends_with("_24months"), -EQ5D5LVAS_24months, -EQ5D5LScore_24months) |>
@@ -1110,7 +1114,7 @@ gt_table <- prop_table |>
     Moderate      = "Moderate",
     Severe        = "Severe",
     Unable        = "Unable"
-  )
+  ) |>
   # Apply background colour scales per column
   data_color(
     columns = "No problems",
@@ -1165,7 +1169,7 @@ gt_table <- prop_table |>
     stub.border.color             = "#dee2e6"
   )
 
-gt_table
+knitr::knit_print(gt_table)
 
 ```
 
