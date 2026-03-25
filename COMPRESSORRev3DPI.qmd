@@ -959,7 +959,7 @@ Rev3DPIPROMTotal <- Rev3DPIMaster |> reframe(
 
 ```{r}
 #| label: tbl-PROM
-#| tbl-cap: "Summary of HOOS subscales at 2 years"
+#| tbl-cap: "Summary of PROMs at 2 years"
 
 
 Rev3DPIPROMTotal |>
