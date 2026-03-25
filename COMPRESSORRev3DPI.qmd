@@ -970,13 +970,14 @@ Rev3DPIPROMTotal |>
     ADL_24mth     = "ADL",
     Quality_24mth = "Quality",
     Total_24mth   = "Total",
+    MSTS_24mth    = "MSTS",
     EQ5D5L_24mth   = "EQ5D"
     # ADL_60mth    = "ADL",
     # Quality_60mth = "Quality",
     # Total_60mth  = "Total"
   ) |>
   tab_spanner(
-    label   = "2 years",
+    label   = "HOOS12",
     columns = c(Pain_24mth, ADL_24mth, Quality_24mth, Total_24mth)
   ) |>
   # ) |>
